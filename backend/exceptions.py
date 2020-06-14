@@ -1,0 +1,2 @@
+class ServiceFullException(Exception):
+    pass
