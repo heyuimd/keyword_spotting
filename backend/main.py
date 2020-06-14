@@ -1,10 +1,10 @@
 import asyncio
-from aiohttp import web, WSCloseCode, WSMsgType
+from aiohttp import web, WSCloseCode, WSMsgType, WSMessage
 import logging
 import weakref
 import exceptions
 
-NUM_SERVICE = -1
+NUM_SERVICE = 2
 
 
 async def on_shutdown(app):
@@ -15,6 +15,7 @@ async def on_shutdown(app):
 
 async def handle_keyword_spotting(request):
     ws = web.WebSocketResponse()
+    i = 0
 
     try:
         app_ws = request.app['websockets']
@@ -25,9 +26,14 @@ async def handle_keyword_spotting(request):
         if len(app_ws) > NUM_SERVICE:
             raise exceptions.ServiceFullException
 
+        msg: WSMessage
         async for msg in ws:
-            if msg.type == WSMsgType.TEXT:
-                data = msg.json()
+            if msg.type in (WSMsgType.TEXT, WSMsgType.BINARY):
+                i += 1
+
+            if i % 100 == 0:
+                logging.info(i)
+                await ws.send_json({'msg': f'sending {i}'})
 
     except exceptions.ServiceFullException:
         await ws.close(code=WSCloseCode.POLICY_VIOLATION,

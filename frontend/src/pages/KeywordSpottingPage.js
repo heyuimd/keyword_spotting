@@ -1,4 +1,4 @@
-import React, {useState, useCallback, useEffect} from 'react';
+import React, {useState, useCallback, useEffect, useRef} from 'react';
 import {makeStyles} from '@material-ui/core/styles';
 import {Grid, Button} from '@material-ui/core';
 import {
@@ -26,42 +26,99 @@ const useStyles = makeStyles(() => ({
 
 function KeywordSpottingPage() {
   const classes = useStyles();
-  const [start, setStart] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [keyword, setKeyword] = useState({
+    detected: false,
+    msg: '',
+  });
   const dispatch = useDispatchContext();
-
-  //useEffect(() => {
-  //  const getMedia = async () => {
-  //    const stream = await navigator.mediaDevices
-  //      .getUserMedia({audio: true, video: false})
-
-  //    const context = new AudioContext();
-  //    const source = context.createMediaStreamSource(stream);
-  //    const processor = context.createScriptProcessor(1024, 1, 1);
-
-  //    source.connect(processor);
-  //    processor.connect(context.destination);
-
-  //    processor.onaudioprocess = function (e) {
-  //      console.log(e.inputBuffer);
-  //    }
-  //  };
-
-  //  getMedia();
-  //}, []);
+  const wsRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const timer = useRef(null);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://0.0.0.0:8080/ws/keyword-spotting');
-    ws.onclose = e => {
-      dispatch({
-        type: 'notify',
-        payload: e.reason,
-      });
+    const getMedia = async ws => {
+      const stream = await navigator.mediaDevices
+        .getUserMedia({audio: true, video: false})
+
+      const context = new AudioContext();
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(1024, 1, 1);
+
+      source.connect(processor);
+      processor.connect(context.destination);
+
+      processor.onaudioprocess = e => {
+        if (ws.readyState === 1) {
+          ws.send(e.inputBuffer);
+        }
+      }
+
+      audioCtxRef.current = context;
+    };
+
+    const closeAudioContext = async () => {
+      if (audioCtxRef.current) {
+        await audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
     }
-  }, []);
+
+    if (connected && wsRef.current) {
+      getMedia(wsRef.current);
+    } else if (!connected && wsRef.current === null) {
+      closeAudioContext();
+    }
+  }, [connected]);
+
+  useEffect(() => {
+    if (started && wsRef.current === null) {
+      const ws = new WebSocket('ws://0.0.0.0:8080/ws/keyword-spotting');
+      ws.onopen = e => {
+        wsRef.current = ws;
+        setConnected(true);
+      }
+      ws.onmessage = e => {
+        const data = JSON.parse(e.data);
+        if (timer.current) {
+          clearTimeout(timer.current);
+        }
+        setKeyword({
+          detected: true,
+          msg: data['msg'],
+        });
+        timer.current = setTimeout(() => setKeyword({
+          detected: false,
+          msg: '',
+        }), 3000);
+      }
+      ws.onclose = e => {
+        wsRef.current = null;
+        setConnected(false);
+        setStarted(false);
+        const randomInt = parseInt(Math.random() * 1000)
+        dispatch({
+          type: 'notify',
+          payload: e.reason
+            ? `${e.reason} [${randomInt}]`
+            : `connection closed [${randomInt}]`,
+        });
+      }
+    } else {
+      if (wsRef.current) {
+        const state = wsRef.current.readyState;
+        if (state !== 2 && state !== 3) {
+          wsRef.current.close();
+        }
+        wsRef.current = null;
+      }
+    }
+  }, [started]);
 
   const handleClick = useCallback(() => {
-    setStart((state) => !state);
-  }, [setStart]);
+    setStarted(state => !state);
+  }, [setStarted]);
 
   return (
     <Grid
@@ -73,7 +130,7 @@ function KeywordSpottingPage() {
       alignItems='center'
     >
       <Grid item>
-        {start
+        {keyword.detected
           ? <LightBulbIcon
             className={classes.lightBulbOn}
           />
@@ -83,8 +140,8 @@ function KeywordSpottingPage() {
         }
       </Grid>
       <Grid item>
-        <Greeting show={start}>
-          HELLO
+        <Greeting show={keyword.detected}>
+          {keyword.detected ? keyword.msg : 'hidden'}
         </Greeting>
       </Grid>
       <Grid item>
