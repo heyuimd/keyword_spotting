@@ -42,9 +42,9 @@ function KeywordSpottingPage() {
       const stream = await navigator.mediaDevices
         .getUserMedia({audio: true, video: false})
 
-      const context = new AudioContext();
+      const context = new AudioContext({sampleRate: 16000});
       const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(1024, 1, 1);
+      const processor = context.createScriptProcessor(4096, 1, 1);
 
       source.connect(processor);
       processor.connect(context.destination);
@@ -150,7 +150,9 @@ function KeywordSpottingPage() {
           color='primary'
           onClick={handleClick}
         >
-          Start Listening
+          {started
+            ? 'Stop Listening'
+            : 'Start Listening'}
         </Button>
       </Grid>
     </Grid>
