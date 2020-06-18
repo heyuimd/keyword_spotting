@@ -40,18 +40,23 @@ function KeywordSpottingPage() {
   useEffect(() => {
     const getMedia = async ws => {
       const stream = await navigator.mediaDevices
-        .getUserMedia({audio: true, video: false})
-
+        .getUserMedia({
+          video: false,
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+          },
+        })
       const context = new AudioContext({sampleRate: 16000});
       const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(4096, 1, 1);
+      const processor = context.createScriptProcessor(1024, 1, 1);
 
       source.connect(processor);
       processor.connect(context.destination);
 
       processor.onaudioprocess = e => {
         if (ws.readyState === 1) {
-          ws.send(e.inputBuffer);
+          ws.send(e.inputBuffer.getChannelData(0));
         }
       }
 
