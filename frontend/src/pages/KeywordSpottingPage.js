@@ -96,7 +96,7 @@ function KeywordSpottingPage() {
         timer.current = setTimeout(() => setKeyword({
           detected: false,
           msg: '',
-        }), 3000);
+        }), 2000);
       }
       ws.onclose = e => {
         wsRef.current = null;

@@ -8,7 +8,34 @@ from aiohttp import web, WSCloseCode, WSMsgType, WSMessage
 
 import exceptions
 
-NUM_SERVICE = 2
+NUM_SERVICE = 1
+
+
+async def listen_to_detector(app):
+    reader: StreamReader = app['reader']
+    ws_dict: WeakValueDictionary = app['web_sockets']['ws']
+    try:
+        while True:
+            data = await reader.readexactly(4)
+            user_id, body_len = struct.unpack("!HH", data)
+            data = await reader.readexactly(body_len)
+            msg = data.decode()
+            ws: web.WebSocketResponse = ws_dict.get(user_id)
+
+            if ws is None:
+                continue
+            await ws.send_json({'msg': msg})
+    except Exception as e:
+        logging.error(e)
+
+
+async def start_background_tasks(app):
+    app['detector_listener'] = asyncio.create_task(listen_to_detector(app))
+
+
+async def cleanup_background_tasks(app):
+    app['detector_listener'].cancel()
+    await app['detector_listener']
 
 
 async def on_shutdown(app):
@@ -64,6 +91,8 @@ async def web_app():
     app['reader'] = reader
     app['writer'] = writer
 
+    app.on_startup.append(start_background_tasks)
+    app.on_cleanup.append(cleanup_background_tasks)
     app.on_shutdown.append(on_shutdown)
     app.add_routes([
         web.get('/ws/keyword-spotting', handle_keyword_spotting),

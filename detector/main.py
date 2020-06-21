@@ -9,19 +9,27 @@ def handle_echo(reader: StreamReader,
     addr = writer.get_extra_info('peername')
     print("Connect from %r" % (addr,))
 
-    with open('data.dat', 'wb') as fout:
-        while True:
-            data = yield from reader.readexactly(4)
-            user_id, body_len = struct.unpack("!HH", data)
-            data = yield from reader.readexactly(body_len)
-            fout.write(data)
+    count = 0
 
-    # write
-    # writer.write(data)
-    # yield from writer.drain()
+    try:
+        with open('data.dat', 'wb') as fout:
+            while True:
+                data = yield from reader.readexactly(4)
+                user_id, body_len = struct.unpack("!HH", data)
+                data = yield from reader.readexactly(body_len)
+                fout.write(data)
 
-    # close
-    # writer.close()
+                if count % 100 == 0:
+                    msg = '안녕하세요.'
+                    msg_encoded = str.encode(msg)
+                    header = struct.pack("!HH", user_id, len(msg_encoded))
+                    writer.write(header + msg_encoded)
+                    yield from writer.drain()
+
+                count += 1
+    except Exception as e:
+        print(e)
+        writer.close()
 
 
 if __name__ == '__main__':
