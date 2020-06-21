@@ -7,11 +7,13 @@ from asyncio import StreamReader, StreamWriter
 import numpy as np
 
 from label_wav import load_labels, load_graph, run_graph
+from PJ4_detector import load_model, find_who
 
 
 def convert_pcm_to_wav(pcm: bytes) -> bytes:
-    np_array_float32: np.ndarray = np.frombuffer(pcm, dtype=np.float32) * 32768
-    np_array_int16 = np_array_float32.astype(np.int16)
+    np_array_float32: np.ndarray = np.frombuffer(pcm, dtype=np.float32)
+    np_array_float32_mul = np_array_float32 * 32768
+    np_array_int16 = np_array_float32_mul.astype(np.int16)
 
     buffer = io.BytesIO()
 
@@ -19,18 +21,22 @@ def convert_pcm_to_wav(pcm: bytes) -> bytes:
         fout.setparams((1, 2, 16000, 0, 'NONE', 'NONE'))
         fout.writeframes(np_array_int16.tobytes())
 
-    return buffer.getvalue()
+    return buffer.getvalue(), np_array_float32
 
 
 @asyncio.coroutine
-def handle_echo(reader: StreamReader,
-                writer: StreamWriter):
+def handle_stream(reader: StreamReader,
+                  writer: StreamWriter):
     addr = writer.get_extra_info('peername')
     print("Connect from %r" % (addr,))
+
     labels_list = load_labels('labels/labels.txt')
     load_graph('model/my_frozen_graph_okyonsei.pb')
 
+    model = load_model()
+
     count = 0
+    detected_count = 0
     last_data_dict = dict()
 
     try:
@@ -46,7 +52,8 @@ def handle_echo(reader: StreamReader,
             if last_data is None:
                 continue
 
-            wav_data = convert_pcm_to_wav(last_data + data)
+            print(count)
+            wav_data, np_data = convert_pcm_to_wav(last_data + data)
 
             with open(f'data/{count:06}.wav', 'wb') as fout:
                 fout.write(wav_data)
@@ -54,11 +61,23 @@ def handle_echo(reader: StreamReader,
             detected, prediction = run_graph(wav_data, labels_list, 3)
 
             if detected:
-                msg = f'안녕하세요. [정확도: {int(prediction * 100)} %]'
-                msg_encoded = str.encode(msg)
-                header = struct.pack("!II", user_id, len(msg_encoded))
-                writer.write(header + msg_encoded)
-                yield from writer.drain()
+                if detected_count:
+                    detected_count = 0
+                    continue
+
+                try:
+                    start_p = max(np_data.argmax() - 300, 0)
+                    name = find_who(model, np_data[start_p:])
+                    msg = f'안녕하세요. {name} [정확도: {int(prediction * 100)} %]'
+                    msg_encoded = str.encode(msg)
+                    header = struct.pack("!II", user_id, len(msg_encoded))
+                    writer.write(header + msg_encoded)
+                    yield from writer.drain()
+                    detected_count += 1
+                except Exception:
+                    pass
+            else:
+                detected_count = 0
 
     except Exception as e:
         print(e)
@@ -67,7 +86,7 @@ def handle_echo(reader: StreamReader,
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
-    coro = asyncio.start_server(handle_echo, '127.0.0.1', 8888, loop=loop)
+    coro = asyncio.start_server(handle_stream, '127.0.0.1', 8888, loop=loop)
     server = loop.run_until_complete(coro)
 
     print('Serving on {}'.format(server.sockets[0].getsockname()))

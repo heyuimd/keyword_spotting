@@ -60,14 +60,12 @@ async def handle_keyword_spotting(request):
         ws_dict[user_id] = ws
         writer: StreamWriter = request.app['writer']
 
-        with open('data.dat', 'wb') as fout:
-            msg: WSMessage
-            async for msg in ws:
-                if msg.type == WSMsgType.BINARY:
-                    fout.write(msg.data)
-                    header = struct.pack("!II", user_id, len(msg.data))
-                    writer.write(header + msg.data)
-                    await writer.drain()
+        msg: WSMessage
+        async for msg in ws:
+            if msg.type == WSMsgType.BINARY:
+                header = struct.pack("!II", user_id, len(msg.data))
+                writer.write(header + msg.data)
+                await writer.drain()
 
     except exceptions.ServiceFullException:
         await ws.close(code=WSCloseCode.POLICY_VIOLATION,
