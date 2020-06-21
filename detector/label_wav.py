@@ -69,7 +69,12 @@ def run_graph(wav_data, labels, num_top_predictions):
             score = predictions[node_id]
             print('%s (score = %.5f)' % (human_string, score))
 
-        return 0
+        detected = False
+
+        if labels[top_k[0]] == 'okyonsei' and predictions[top_k[0]] > 0.9:
+            detected = True
+
+        return detected, predictions[top_k[0]]
 
 
 def label_wav(wav, labels, graph, input_name, output_name, how_many_labels):

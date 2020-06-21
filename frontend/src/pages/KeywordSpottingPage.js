@@ -49,7 +49,7 @@ function KeywordSpottingPage() {
         })
       const context = new AudioContext({sampleRate: 16000});
       const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(16384, 1, 1);
+      const processor = context.createScriptProcessor(8192, 1, 1);
 
       source.connect(processor);
       processor.connect(context.destination);

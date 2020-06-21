@@ -31,28 +31,35 @@ def handle_echo(reader: StreamReader,
     load_graph('model/my_frozen_graph_okyonsei.pb')
 
     count = 0
-    last_data = dict()
+    last_data_dict = dict()
 
     try:
         while True:
+            count += 1
             data = yield from reader.readexactly(8)
             user_id, body_len = struct.unpack("!II", data)
             data = yield from reader.readexactly(body_len)
-            wav_data = convert_pcm_to_wav(data)
 
-            with open(f'{count}.wav', 'wb') as fout:
+            last_data = last_data_dict.get(user_id)
+            last_data_dict[user_id] = data
+
+            if last_data is None:
+                continue
+
+            wav_data = convert_pcm_to_wav(last_data + data)
+
+            with open(f'data/{count:06}.wav', 'wb') as fout:
                 fout.write(wav_data)
 
-            run_graph(wav_data, labels_list, 3)
+            detected, prediction = run_graph(wav_data, labels_list, 3)
 
-            if count % 100 == 0:
-                msg = f'안녕하세요. {count}'
+            if detected:
+                msg = f'안녕하세요. [정확도: {int(prediction * 100)} %]'
                 msg_encoded = str.encode(msg)
                 header = struct.pack("!II", user_id, len(msg_encoded))
                 writer.write(header + msg_encoded)
                 yield from writer.drain()
 
-            count += 1
     except Exception as e:
         print(e)
         writer.close()

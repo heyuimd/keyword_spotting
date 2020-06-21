@@ -245,3 +245,4 @@ pg_data/
 env.sh
 env.*.sh
 apiserver/media
+**/data/*.wav
