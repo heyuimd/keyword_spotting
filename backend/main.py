@@ -16,8 +16,8 @@ async def listen_to_detector(app):
     ws_dict: WeakValueDictionary = app['web_sockets']['ws']
     try:
         while True:
-            data = await reader.readexactly(4)
-            user_id, body_len = struct.unpack("!HH", data)
+            data = await reader.readexactly(8)
+            user_id, body_len = struct.unpack("!II", data)
             data = await reader.readexactly(body_len)
             msg = data.decode()
             ws: web.WebSocketResponse = ws_dict.get(user_id)
@@ -65,14 +65,15 @@ async def handle_keyword_spotting(request):
             async for msg in ws:
                 if msg.type == WSMsgType.BINARY:
                     fout.write(msg.data)
-                    header = struct.pack("!HH", user_id, len(msg.data))
+                    header = struct.pack("!II", user_id, len(msg.data))
                     writer.write(header + msg.data)
                     await writer.drain()
 
     except exceptions.ServiceFullException:
         await ws.close(code=WSCloseCode.POLICY_VIOLATION,
                        message=b'service full')
-    except Exception:
+    except Exception as e:
+        logging.error(e)
         await ws.close(code=WSCloseCode.INTERNAL_ERROR,
                        message=b'error')
     finally:
